@@ -33,7 +33,7 @@ The filtering process for the velocity metric data was performed using the scrip
 
 ## Usage
 
-To navigate through the project, please refer to the folder structure outlined above. Each section contains the necessary files and data for your analysis and documentation.
+To navigate through the project, please refer to the folder structure outlined above. Each section contains the necessary files and data for your analysis and documentation. Make sure to entire into the metrics folder before running any scripts
 
 ---
 
