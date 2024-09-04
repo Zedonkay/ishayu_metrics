@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import ttest_ind
+import numpy as np
 
 def read_data(file_path):
     """
@@ -39,7 +40,7 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
     std_velocities (pd.Series): Standard deviation of forward velocities for each terrain.
     
     Returns:
-    pd.DataFrame: Results of the t-tests including p-values.
+    pd.DataFrame: Results of the t-tests including p-values and t-statistics.
     """
     flat_mean = mean_velocities['flat']
     predefined_means = mean_velocities.filter(like='predefined')
@@ -70,15 +71,19 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
                     'Mean Forward Velocity': terrain_mean,
                     'Std Forward Velocity': std_velocities[terrain],
                     'P-value (vs flat)': p_val_flat,
-                    'P-value (vs predefined)': p_val_predefined
+                    'P-value (vs predefined)': p_val_predefined,
+                    'T-statistic (vs flat)': t_stat_flat,
+                    'T-statistic (vs predefined)': t_stat_predefined
                 })
         else:
             results.append({
                 'Terrain': terrain,
                 'Mean Forward Velocity': terrain_mean,
                 'Std Forward Velocity': std_velocities[terrain],
-                'P-value (vs flat)': None,
-                'P-value (vs predefined)': None
+                'P-value (vs flat)': np.nan,
+                'P-value (vs predefined)': np.nan,
+                'T-statistic (vs flat)': np.nan,
+                'T-statistic (vs predefined)': np.nan
             })
     
     return pd.DataFrame(results)
