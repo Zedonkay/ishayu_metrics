@@ -81,6 +81,25 @@ def plot_boxplot(data, base_filename):
     plt.tight_layout()
     save_plot(fig, base_filename, 'boxplot/boxplot_exponents')
 
+def plot_scatter(data, base_filename):
+    """
+    Plot a scatter plot of all exponents against the terrains and save the plot.
+    
+    Parameters:
+    data (pd.DataFrame): The data containing terrain and exponents.
+    base_filename (str): The base filename for saving the plot.
+    """
+    fig, ax = plt.subplots(figsize=(12, 6))
+    for terrain in data['Terrain'].unique():
+        terrain_data = data[data['Terrain'] == terrain]
+        ax.scatter(terrain_data['Terrain'], terrain_data['Exponent'], label=terrain)
+    ax.set_xlabel('Terrain')
+    ax.set_ylabel('Exponents')
+    ax.set_title('Scatter Plot of Exponents by Terrain')
+    plt.xticks(rotation=45)
+    plt.tight_layout()
+    save_plot(fig, base_filename, 'scatter/scatter_exponents')
+
 def perform_statistical_tests(data, mean_exponents, std_exponents):
     """
     Perform t-tests to compare the mean exponents.
@@ -159,6 +178,7 @@ def running(file_path, output_file, base_filename):
     # Plot the exponents and save the plots
     plot_exponents(mean_exponents, std_exponents, base_filename)
     plot_boxplot(data, base_filename)
+    plot_scatter(data, base_filename)
     
     # Perform statistical tests and save the results
     test_results_df = perform_statistical_tests(data, mean_exponents, std_exponents)
