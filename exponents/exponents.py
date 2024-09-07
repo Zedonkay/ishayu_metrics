@@ -31,7 +31,6 @@ def calculate_statistics(data):
     mean_exponents.index.name = 'Terrain'  # Ensure the index name is set to 'Terrain'
     return mean_exponents, std_exponents
 
-
 def perform_statistical_tests(data, mean_exponents, std_exponents):
     """
     Perform t-tests to compare the mean exponents.
@@ -44,51 +43,40 @@ def perform_statistical_tests(data, mean_exponents, std_exponents):
     Returns:
     pd.DataFrame: Results of the t-tests including p-values and t-statistics.
     """
-    flat_mean = mean_exponents['flat']
-    predefined_means = mean_exponents.filter(like='predefined')
-    
     results = []
     for terrain in mean_exponents.index:
         terrain_mean = mean_exponents[terrain]
-        predefined_terrain = f'predefined_{terrain}'
         
         if terrain != 'flat' and not terrain.startswith('predefined'):
-            if predefined_terrain in predefined_means.index:
-                predefined_mean = predefined_means[predefined_terrain]
-                
-                # T-test between terrain and flat
-                t_stat_flat, p_val_flat = ttest_ind(
-                    data[data['Terrain'] == terrain]['Exponent'],
-                    data[data['Terrain'] == 'flat']['Exponent']
-                )
-                
-                # T-test between terrain and predefined terrain
-                t_stat_predefined, p_val_predefined = ttest_ind(
-                    data[data['Terrain'] == terrain]['Exponent'],
-                    data[data['Terrain'] == predefined_terrain]['Exponent']
-                )
-                
-                results.append({
-                    'Terrain': terrain,
-                    'Mean Exponent': terrain_mean,
-                    'Std Exponent': std_exponents[terrain],
-                    'P-value (vs flat)': p_val_flat,
-                    'P-value (vs predefined)': p_val_predefined,
-                    'T-statistic (vs flat)': t_stat_flat,
-                    'T-statistic (vs predefined)': t_stat_predefined
-                })
+            # T-test between terrain and flat
+            t_stat_flat, p_val_flat = ttest_ind(
+                data[data['Terrain'] == terrain]['Exponent'],
+                data[data['Terrain'] == 'flat']['Exponent'],
+                equal_var=False  # Assuming unequal variances
+            )
+            
+            results.append({
+                'Terrain': terrain,
+                'Mean Exponent': terrain_mean,
+                'Std Exponent': std_exponents[terrain],
+                'P-value (vs flat)': p_val_flat,
+                'T-statistic (vs flat)': t_stat_flat
+            })
         else:
             results.append({
                 'Terrain': terrain,
                 'Mean Exponent': terrain_mean,
                 'Std Exponent': std_exponents[terrain],
                 'P-value (vs flat)': np.nan,
-                'P-value (vs predefined)': np.nan,
-                'T-statistic (vs flat)': np.nan,
-                'T-statistic (vs predefined)': np.nan
+                'T-statistic (vs flat)': np.nan
             })
     
     return pd.DataFrame(results)
+
+# Null Hypothesis: The means of each of the terrains is not statistically different from flat terrain.
+# Alternative Hypothesis: The means of each of the terrains is statistically different from flat terrain.
+
+
 
 
 def save_plot(fig, base_filename, title):
@@ -163,6 +151,7 @@ def plot_exponents(mean_exponents, std_exponents, base_filename):
     plt.xticks(rotation=45)
     plt.tight_layout()
     save_plot(fig, base_filename, 'bar_graph/mean_exponents')
+
 def plot_graphs(data, mean_exponents, std_exponents, base_filename):
     """
     Plot all three graphs: mean exponents, box plot, and scatter plot, and save the plots.
