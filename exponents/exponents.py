@@ -52,7 +52,6 @@ def perform_statistical_tests(data, mean_exponents, std_exponents):
             t_stat_flat, p_val_flat = ttest_ind(
                 data[data['Terrain'] == terrain]['Exponent'],
                 data[data['Terrain'] == 'flat']['Exponent'],
-                equal_var=False  # Assuming unequal variances
             )
             
             results.append({
