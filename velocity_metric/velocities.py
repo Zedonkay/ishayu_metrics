@@ -1,6 +1,7 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
 
 def read_data(file_path):
     """
@@ -14,23 +15,28 @@ def read_data(file_path):
     """
     return pd.read_csv(file_path)
 
-def calculate_statistics(data):
-    """
-    Calculate the percentage velocities, mean, and standard deviation for each terrain.
-    
-    Parameters:
-    data (pd.DataFrame): The data containing terrain and forward velocities.
-    
-    Returns:
-    pd.DataFrame: The data with percentage velocities.
-    pd.Series: Mean percentage velocities for each terrain.
-    pd.Series: Standard deviation of percentage velocities for each terrain.
-    """
-    flat_mean = data[data['Terrain'] == 'flat']['Forward Velocities'].mean()
-    data['Velocity % of Flat'] = (data['Forward Velocities'] / flat_mean) * 100
-    mean_velocities = data.groupby('Terrain')['Velocity % of Flat'].mean()
-    std_velocities = data.groupby('Terrain')['Velocity % of Flat'].std()
-    return data, mean_velocities, std_velocities
+def calculate_statistics(df):
+    # Calculate the mean velocity for the flat terrain
+    flat_mean_velocity = df[df['Terrain'] == 'flat']['Forward Velocities'].apply(eval).explode().mean()
+    predefined_flat_mean_velocity = df[df['Terrain'] == 'predefined_flat']['Forward Velocities'].apply(eval).explode().mean()
+
+    # Function to normalize velocities
+    def normalize(row):
+        velocities = eval(row['Forward Velocities'])
+        if row['Terrain'].startswith('predefined'):
+            normalized_velocities = [(v / predefined_flat_mean_velocity) * 100 for v in velocities]
+        else:
+            normalized_velocities = [(v / flat_mean_velocity) * 100 for v in velocities]
+        return normalized_velocities
+
+    # Apply the normalization function to each row
+    df['% of Flat Velocities'] = df.apply(normalize, axis=1)
+
+    # Calculate mean and standard deviation for each % of Flat Velocities
+    means = df['% of Flat Velocities'].apply(lambda x: pd.Series(x).mean())
+    stds = df['% of Flat Velocities'].apply(lambda x: pd.Series(x).std())
+
+    return df, means, stds
 
 def paired_permutation_test(x, y, num_permutations=100000):
     """
@@ -99,13 +105,27 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
                     'P-value (vs predefined)': p_val_predefined
                 })
         else:
-            results.append({
-                'Terrain': terrain,
-                'Mean Velocity % of Flat': mean_velocities[terrain],
-                'Std Velocity % of Flat': std_velocities[terrain],
-                'P-value (vs flat)': np.nan,
-                'P-value (vs predefined)': np.nan
-            })
+            if 'flat' not in terrain:
+                p_val_flat = paired_permutation_test(
+                        data[data['Terrain'] == 'predefined_flat']['Velocity % of Flat'],
+                        data[data['Terrain'] == terrain]['Velocity % of Flat']
+                    )
+                results.append({
+                    'Terrain': terrain,
+                    'Mean Velocity % of Flat': mean_velocities[terrain],
+                    'Std Velocity % of Flat': std_velocities[terrain],
+                    'P-value (vs flat)': p_val_flat,
+                    'P-value (vs predefined)': np.nan
+                })
+
+            else:
+                results.append({
+                    'Terrain': terrain,
+                    'Mean Velocity % of Flat': mean_velocities[terrain],
+                    'Std Velocity % of Flat': std_velocities[terrain],
+                    'P-value (vs flat)': np.nan,
+                    'P-value (vs predefined)': np.nan
+                })
     
     return pd.DataFrame(results)
 
@@ -134,32 +154,68 @@ def plot_velocities(mean_velocities, std_velocities, base_filename):
     std_velocities (pd.Series): Standard deviation of percentage velocities for each terrain.
     base_filename (str): The base filename for saving the plot.
     """
-    fig, ax = plt.subplots(figsize=(10, 6))
-    mean_velocities.plot(kind='bar', yerr=std_velocities, capsize=4, color='skyblue', edgecolor='black', ax=ax)
-    ax.set_xlabel('Terrain')
-    ax.set_ylabel('Mean Velocity % of Flat')
-    ax.set_title('Mean Velocity % of Flat with Standard Deviation')
-    plt.xticks(rotation=45)
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+    
+    # Separate predefined and non-predefined terrains
+    predefined_mask = mean_velocities.index.str.startswith('predefined')
+    non_predefined_mask = ~predefined_mask
+    
+    # Plot predefined terrains
+    mean_velocities_predefined = mean_velocities[predefined_mask]
+    std_velocities_predefined = std_velocities[predefined_mask]
+    
+    # Plot positive and negative bars separately for predefined terrains
+    mean_velocities_predefined_positive = mean_velocities_predefined[mean_velocities_predefined >= 0]
+    mean_velocities_predefined_negative = mean_velocities_predefined[mean_velocities_predefined < 0]
+    
+    mean_velocities_predefined_positive.plot(kind='bar', yerr=std_velocities_predefined[mean_velocities_predefined_positive.index], capsize=4, color='purple', edgecolor='black', ax=ax1, position=1, width=0.4)
+    mean_velocities_predefined_negative.plot(kind='bar', yerr=std_velocities_predefined[mean_velocities_predefined_negative.index], capsize=4, color='purple', edgecolor='black', ax=ax1, position=1, width=0.4)
+    
+    # Create a second y-axis for non-predefined terrains
+    ax2 = ax1.twinx()
+    mean_velocities[non_predefined_mask].plot(kind='bar', yerr=std_velocities[non_predefined_mask], capsize=4, color='orange', edgecolor='black', ax=ax2, position=0, width=0.4)
+    
+    # Set labels and title
+    ax1.set_xlabel('Terrain')
+    ax1.set_ylabel('Mean Velocity % of Flat (Predefined)')
+    ax2.set_ylabel('Mean Velocity % of Flat (Non-Predefined)')
+    ax1.set_title('Mean Velocity % of Flat with Standard Deviation')
+    
+    # Adjust x-ticks to show both predefined and non-predefined terrains
+    ax1.set_xticks(range(len(mean_velocities)))
+    ax1.set_xticklabels(mean_velocities.index, rotation=45)
+    
     plt.tight_layout()
     save_plot(fig, base_filename, 'bar graph/mean_velocity_percent_flat')
 
-def plot_boxplot(data, base_filename):
+
+def plot_violinplot(data, base_filename):
     """
-    Plot a box plot of percentage velocities for each terrain and save the plot.
+    Plot a violin plot of percentage velocities for each terrain and its predefined version, and save the plot.
     
     Parameters:
     data (pd.DataFrame): The data containing terrain and percentage velocities.
     base_filename (str): The base filename for saving the plot.
     """
     fig, ax = plt.subplots(figsize=(12, 6))
-    data.boxplot(column='Velocity % of Flat', by='Terrain', grid=False, patch_artist=True, boxprops=dict(facecolor='skyblue'), ax=ax)
+    
+    # Separate predefined and normal terrains
+    data['Type'] = data['Terrain'].apply(lambda x: 'Predefined' if x.startswith('predefined_') else 'Normal')
+    data['Terrain'] = data['Terrain'].apply(lambda x: x.replace('predefined_', ''))
+    
+    # Plot violin plots
+    sns.violinplot(x='Terrain', y='Velocity % of Flat', hue='Type', data=data, split=True, inner='box', ax=ax, palette='muted')
+    
+    # Customize the plot
     ax.set_xlabel('Terrain')
     ax.set_ylabel('Velocity % of Flat')
-    ax.set_title('Box Plot of Velocity % of Flat by Terrain')
-    plt.suptitle('')
+    ax.set_title('Violin Plot of Velocity % of Flat by Terrain')
     plt.xticks(rotation=45)
     plt.tight_layout()
-    save_plot(fig, base_filename, 'boxplot/velocity_percent_flat')
+    
+    # Save the plot
+    save_plot(fig, base_filename, 'violinplot/velocity_percent_flat')
+
 
 def running(file_path, output_file, base_filename):
     """
@@ -182,8 +238,8 @@ def running(file_path, output_file, base_filename):
     results_df.to_csv(output_file, index=False)
     
     # Plot the velocities and save the plots
-    plot_velocities(mean_velocities, std_velocities, base_filename)
-    plot_boxplot(data, base_filename)
+    #plot_velocities(mean_velocities, std_velocities, base_filename)
+    plot_violinplot(data, base_filename)
     
     return results_df
 
