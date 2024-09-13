@@ -1,7 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
+import matplotlib.patches as mpatches
+import ast
+from scipy.stats import mannwhitneyu
 
 def read_data(file_path):
     """
@@ -16,54 +18,68 @@ def read_data(file_path):
     return pd.read_csv(file_path)
 
 def calculate_statistics(df):
+    """
+    Calculate statistics for velocity data.
+
+    Args:
+        df (pandas.DataFrame): DataFrame containing velocity data.
+
+    Returns:
+        tuple: A tuple containing the following:
+            - df (pandas.DataFrame): The original DataFrame with an additional column '% of Flat Velocities' 
+              containing normalized velocities.
+            - means (pandas.Series): Series containing the mean values for each '% of Flat Velocities'.
+            - stds (pandas.Series): Series containing the standard deviation values for each '% of Flat Velocities'.
+    """
+    # Function to safely convert strings to lists
+    def safe_eval(value, row):
+        if isinstance(value, str):
+            try:
+                return ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                return value
+        else:
+            # If the value is numeric, print the relevant details
+            print(f"Numeric value found in 'Forward Velocities' on Date: {row['Date']}, Terrain: {row['Terrain']}, Trial: {row['Trial']}")
+            return value
+
+    # Convert the 'Forward Velocities' column if necessary
+    df['Forward Velocities'] = df.apply(lambda row: safe_eval(row['Forward Velocities'], row), axis=1)
+
+    # Group by 'Terrain' and concatenate 'Forward Velocities' lists
+    df = df.groupby('Terrain').agg({
+        'Forward Velocities': lambda x: sum(x, []),
+        'Date': 'first',  # Keep the first date for each terrain
+        'Trial': 'first'  # Keep the first trial for each terrain
+    }).reset_index()
+
     # Calculate the mean velocity for the flat terrain
-    flat_mean_velocity = df[df['Terrain'] == 'flat']['Forward Velocities'].apply(eval).explode().mean()
-    predefined_flat_mean_velocity = df[df['Terrain'] == 'predefined_flat']['Forward Velocities'].apply(eval).explode().mean()
+    flat_mean_velocity = df[df['Terrain'] == 'flat']['Forward Velocities'].explode().mean()
+    predefined_flat_mean_velocity = df[df['Terrain'] == 'predefined_flat']['Forward Velocities'].explode().mean()
 
     # Function to normalize velocities
     def normalize(row):
-        velocities = eval(row['Forward Velocities'])
-        if row['Terrain'].startswith('predefined'):
-            normalized_velocities = [(v / predefined_flat_mean_velocity) * 100 for v in velocities]
+        velocities = row['Forward Velocities']
+        if isinstance(velocities, list):
+            if row['Terrain'].startswith('predefined'):
+                normalized_velocities = [(v / predefined_flat_mean_velocity) * 100 for v in velocities]
+            else:
+                normalized_velocities = [(v / flat_mean_velocity) * 100 for v in velocities]
+            return normalized_velocities
         else:
-            normalized_velocities = [(v / flat_mean_velocity) * 100 for v in velocities]
-        return normalized_velocities
+            # Handle as a single value if it's not a list
+            return (velocities / predefined_flat_mean_velocity if row['Terrain'].startswith('predefined') 
+                    else velocities / flat_mean_velocity) * 100
 
     # Apply the normalization function to each row
-    df['% of Flat Velocities'] = df.apply(normalize, axis=1)
+    df['Velocity % of Flat'] = df.apply(normalize, axis=1)
 
     # Calculate mean and standard deviation for each % of Flat Velocities
-    means = df['% of Flat Velocities'].apply(lambda x: pd.Series(x).mean())
-    stds = df['% of Flat Velocities'].apply(lambda x: pd.Series(x).std())
+    means = df['Velocity % of Flat'].apply(lambda x: pd.Series(x).mean() if isinstance(x, list) else x)
+    stds = df['Velocity % of Flat'].apply(lambda x: pd.Series(x).std() if isinstance(x, list) else 0)
+    means.index = df['Terrain']
 
     return df, means, stds
-
-def paired_permutation_test(x, y, num_permutations=100000):
-    """
-    Perform a paired permutation test.
-    
-    Parameters:
-    x (array-like): The first sample.
-    y (array-like): The second sample.
-    num_permutations (int): The number of permutations to perform.
-    
-    Returns:
-    float: The p-value of the test.
-    """
-    observed_diff = np.mean(x) - np.mean(y)
-    combined = np.concatenate([x, y])
-    count = 0
-    
-    for _ in range(num_permutations):
-        np.random.shuffle(combined)
-        perm_x = combined[:len(x)]
-        perm_y = combined[len(x):]
-        perm_diff = np.mean(perm_x) - np.mean(perm_y)
-        if abs(perm_diff) >= abs(observed_diff):
-            count += 1
-    
-    p_value = count / num_permutations
-    return p_value
 
 def perform_statistical_tests(data, mean_velocities, std_velocities):
     """
@@ -75,59 +91,62 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
     std_velocities (pd.Series): Standard deviation of percentage velocities for each terrain.
     
     Returns:
-    pd.DataFrame: Results of the tests including p-values.
+    pd.DataFrame: Results of the tests including U values and p-values.
     """
     results = []
     for terrain in mean_velocities.index:
         predefined_terrain = f'predefined_{terrain}'
-        
+        print(f"terrain = {terrain}, type: {type(terrain)}")
         if not terrain.startswith('predefined'):
             if predefined_terrain in mean_velocities.index:
-                if terrain!="flat":
-                    # Paired permutation test between terrain and flat
-                    p_val_flat = paired_permutation_test(
-                        data[data['Terrain'] == 'flat']['Velocity % of Flat'],
-                        data[data['Terrain'] == terrain]['Velocity % of Flat']
-                    )
+                if terrain != "flat":
+                    # Ensure data is numeric and handle NaNs
+                    flat_data = pd.to_numeric(data[data['Terrain'] == 'flat']['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                    terrain_data = pd.to_numeric(data[data['Terrain'] == terrain]['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                    u_val_flat, p_val_flat = mannwhitneyu(flat_data, terrain_data, nan_policy='omit')
                 else:
-                    p_val_flat = np.nan
-                # Paired permutation test between terrain and predefined terrain
-                p_val_predefined = paired_permutation_test(
-                    data[data['Terrain'] == terrain]['Velocity % of Flat'],
-                    data[data['Terrain'] == predefined_terrain]['Velocity % of Flat']
-                )
+                    u_val_flat, p_val_flat = np.nan, np.nan
+                # Ensure data is numeric and handle NaNs
+                terrain_data = pd.to_numeric(data[data['Terrain'] == terrain]['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                predefined_data = pd.to_numeric(data[data['Terrain'] == predefined_terrain]['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                u_val_predefined, p_val_predefined = mannwhitneyu(terrain_data, predefined_data, nan_policy='omit')
                 
                 results.append({
                     'Terrain': terrain,
                     'Mean Velocity % of Flat': mean_velocities[terrain],
-                    'Std Velocity % of Flat': std_velocities[terrain],
+                    'Std Velocity % of Flat': std_velocities.get(terrain, np.nan),  # Use get to avoid KeyError
+                    'U-value (vs flat)': u_val_flat,
                     'P-value (vs flat)': p_val_flat,
+                    'U-value (vs predefined)': u_val_predefined,
                     'P-value (vs predefined)': p_val_predefined
                 })
         else:
             if 'flat' not in terrain:
-                p_val_flat = paired_permutation_test(
-                        data[data['Terrain'] == 'predefined_flat']['Velocity % of Flat'],
-                        data[data['Terrain'] == terrain]['Velocity % of Flat']
-                    )
+                flat_data = pd.to_numeric(data[data['Terrain'] == 'predefined_flat']['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                terrain_data = pd.to_numeric(data[data['Terrain'] == terrain]['Velocity % of Flat'].explode(), errors='coerce').dropna()
+                u_val_flat, p_val_flat = mannwhitneyu(flat_data, terrain_data, nan_policy='omit')
                 results.append({
                     'Terrain': terrain,
                     'Mean Velocity % of Flat': mean_velocities[terrain],
-                    'Std Velocity % of Flat': std_velocities[terrain],
+                    'Std Velocity % of Flat': std_velocities.get(terrain, np.nan),  # Use get to avoid KeyError
+                    'U-value (vs flat)': u_val_flat,
                     'P-value (vs flat)': p_val_flat,
+                    'U-value (vs predefined)': np.nan,
                     'P-value (vs predefined)': np.nan
                 })
-
             else:
                 results.append({
                     'Terrain': terrain,
                     'Mean Velocity % of Flat': mean_velocities[terrain],
-                    'Std Velocity % of Flat': std_velocities[terrain],
+                    'Std Velocity % of Flat': std_velocities.get(terrain, np.nan),  # Use get to avoid KeyError
+                    'U-value (vs flat)': np.nan,
                     'P-value (vs flat)': np.nan,
+                    'U-value (vs predefined)': np.nan,
                     'P-value (vs predefined)': np.nan
                 })
     
     return pd.DataFrame(results)
+
 
 def save_plot(fig, base_filename, title):
     """
@@ -154,7 +173,7 @@ def plot_velocities(mean_velocities, std_velocities, base_filename):
     std_velocities (pd.Series): Standard deviation of percentage velocities for each terrain.
     base_filename (str): The base filename for saving the plot.
     """
-    fig, ax1 = plt.subplots(figsize=(10, 6))
+    fig, ax1 = plt.subplots(figsize=(12, 6))
     
     # Separate predefined and non-predefined terrains
     predefined_mask = mean_velocities.index.str.startswith('predefined')
@@ -187,9 +206,28 @@ def plot_velocities(mean_velocities, std_velocities, base_filename):
     
     plt.tight_layout()
     save_plot(fig, base_filename, 'bar graph/mean_velocity_percent_flat')
+labels = []
+def add_label(violin, label):
+    """
+    Function to add a label to the violin plot.
+    Args:
+        violin (matplotlib.container.ViolinPlot): The violin plot object.
+        label (str): The label to be added.
+    """
+    color = violin["bodies"][0].get_facecolor().flatten()  # Get the color of the violin plot
+    labels.append((mpatches.Patch(color=color), label))  # Append the color and label to the labels list
 
+def set_axis_style(ax, labels):
+    """
+    Function to set the style of the x-axis.
+    Args:
+        ax (matplotlib.axes.Axes): The axes object.
+        labels (list): List of labels for the x-axis.
+    """
+    ax.set_xticks(np.arange(1, len(labels) + 1), labels=labels)  # Set the tick positions and labels for the x-axis
+    ax.set_xlim(0.25, len(labels) + 0.75)  # Set the limits of the x-axis
 
-def plot_violinplot(data, base_filename):
+def plot_violinplot(velocities_neural, velocities_predefined, terrains, base_filename):
     """
     Plot a violin plot of percentage velocities for each terrain and its predefined version, and save the plot.
     
@@ -200,18 +238,25 @@ def plot_violinplot(data, base_filename):
     fig, ax = plt.subplots(figsize=(12, 6))
     
     # Separate predefined and normal terrains
-    data['Type'] = data['Terrain'].apply(lambda x: 'Predefined' if x.startswith('predefined_') else 'Normal')
-    data['Terrain'] = data['Terrain'].apply(lambda x: x.replace('predefined_', ''))
-    
-    # Plot violin plots
-    sns.violinplot(x='Terrain', y='Velocity % of Flat', hue='Type', data=data, split=True, inner='box', ax=ax, palette='muted')
+    add_label(ax.violinplot(velocities_neural, side='high', showmeans=False, showmedians=True, showextrema=False), "Neural")
+    add_label(ax.violinplot(velocities_predefined, side='low', showmeans=False, showmedians=True, showextrema=False), "Predefined")
+    ax.legend(*zip(*labels), loc=9)
     
     # Customize the plot
     ax.set_xlabel('Terrain')
-    ax.set_ylabel('Velocity % of Flat')
+    ax.set_ylabel('Velocity % of Predefined Flat')
     ax.set_title('Violin Plot of Velocity % of Flat by Terrain')
+    set_axis_style(ax, terrains)
     plt.xticks(rotation=45)
     plt.tight_layout()
+    
+    # Add a second y-axis on the right side
+    ax2 = ax.twinx()
+    ax2.set_ylabel('Velocity % of Neural Flat')
+    
+    # Set y-axis limits
+    ax.set_ylim(0, 100)  # Adjust the limits as needed
+    ax2.set_ylim(0, 100)  # Adjust the limits as needed
     
     # Save the plot
     save_plot(fig, base_filename, 'violinplot/velocity_percent_flat')
@@ -239,15 +284,14 @@ def running(file_path, output_file, base_filename):
     
     # Plot the velocities and save the plots
     #plot_velocities(mean_velocities, std_velocities, base_filename)
-    plot_violinplot(data, base_filename)
+    velocities_neural = data[data['Terrain'].str.startswith('predefined') == False]['Velocity % of Flat'].tolist()
+    velocities_predefined = data[data['Terrain'].str.startswith('predefined')]['Velocity % of Flat'].tolist()
+    terrains = data[data['Terrain'].str.startswith('predefined') == False]['Terrain'].tolist()
+    plot_violinplot(velocities_neural, velocities_predefined, terrains, base_filename)
     
     return results_df
 
 def main():
-    file_path = 'sheets/filtered_velocities.csv'
-    output_file = 'sheets/filtered_velocities_table.csv'
-    base_filename = 'graphs/filtered/'
-    results_df = running(file_path, output_file, base_filename)
     file_path = 'sheets/velocities.csv'
     output_file = 'sheets/velocities_table.csv'
     base_filename = 'graphs/all/'
