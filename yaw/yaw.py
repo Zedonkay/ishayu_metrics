@@ -17,54 +17,45 @@ def read_data(file_path):
     return pd.read_csv(file_path)
 
 def calculate_statistics(data):
-    flat_mean_velocities = np.mean(data[data['Terrain'] == 'flat']['Forward Velocities'])
-    predefined_flat_mean_velocities = np.mean(data[data['Terrain'] == 'predefined_flat']['Forward Velocities'])
      # Sort the data according to the terrain list
     terrain_list = ['flat', 'predefined_flat', 'amputate_L3',"predefined_amputate_L3" , 'amputate_R2', 'predefined_amputate_R2',
                     'terrain','predefined_terrain',"amputate_R2_L2","predefined_amputate_R2_L2","amputate_R3_L3","predefined_amputate_R3_L3"]  # Replace with your desired terrain list
     data['Terrain'] = pd.Categorical(data['Terrain'], categories=terrain_list, ordered=True)
     data.sort_values('Terrain', inplace=True)
-
-    def percent_decrease(row):
-        if row['Terrain'].startswith('predefined'):
-            return 100 * (1 - (row['Forward Velocities'] / predefined_flat_mean_velocities))
-        else:
-            return 100 * (1 - (row['Forward Velocities'] / flat_mean_velocities))
-    data['Velocity % of Flat'] = data.apply(percent_decrease, axis=1)
-    means = data.groupby('Terrain')['Velocity % of Flat'].mean()
-    stds = data.groupby('Terrain')['Velocity % of Flat'].std()
+    means = data.groupby('Terrain')['Yaw Rate'].mean()
+    stds = data.groupby('Terrain')['Yaw Rate'].std()
     
    
     
     return data, means, stds
 
-def perform_statistical_tests(data, mean_velocities, std_velocities):
+def perform_statistical_tests(data, mean_yaws, std_yaws):
     """
-    Perform Mann-Whitney U tests to compare the mean forward velocities.
+    Perform Mann-Whitney U tests to compare the mean forward yaws.
     
     Parameters:
-    data (pd.DataFrame): The data containing terrain and forward velocities.
-    mean_velocities (pd.Series): Mean forward velocities for each terrain.
-    std_velocities (pd.Series): Standard deviation of forward velocities for each terrain.
+    data (pd.DataFrame): The data containing terrain and forward yaws.
+    mean_yaws (pd.Series): Mean forward yaws for each terrain.
+    std_yaws (pd.Series): Standard deviation of forward yaws for each terrain.
     
     Returns:
     pd.DataFrame: Results of the tests including p-values and U-statistics.
     """
-    flat_mean = mean_velocities['flat']
-    predefined_means = mean_velocities.filter(like='predefined')
+    flat_mean = mean_yaws['flat']
+    predefined_means = mean_yaws.filter(like='predefined')
     
     results = []
-    for terrain in mean_velocities.index:
+    for terrain in mean_yaws.index:
         print(f"terrain: {terrain}")
-        terrain_mean = mean_velocities[terrain]
+        terrain_mean = mean_yaws[terrain]
         predefined_terrain = f'predefined_{terrain}'
         
         if not terrain.startswith('predefined'):
                 if terrain != 'flat':
                     # Mann-Whitney U test between terrain and flat
                     u_stat_flat, p_val_flat = mannwhitneyu(
-                        data[data['Terrain'] == terrain]['Velocity % of Flat'],
-                        data[data['Terrain'] == 'flat']['Velocity % of Flat'],
+                        data[data['Terrain'] == terrain]['Yaw Rate'],
+                        data[data['Terrain'] == 'flat']['Yaw Rate'],
                         alternative='greater'
                     )
                 else:
@@ -73,15 +64,15 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
                 
                 # Mann-Whitney U test between terrain and predefined terrain
                 u_stat_predefined, p_val_predefined = mannwhitneyu(
-                        data[data['Terrain'] == terrain]['Velocity % of Flat'],
-                        data[data['Terrain'] == predefined_terrain]['Velocity % of Flat'],
+                        data[data['Terrain'] == terrain]['Yaw Rate'],
+                        data[data['Terrain'] == predefined_terrain]['Yaw Rate'],
                         alternative='less'
                     )
                 
                 results.append({
                     'Terrain': terrain,
-                    'Mean Forward Velocity': terrain_mean,
-                    'Std Forward Velocity': std_velocities[terrain],
+                    'Mean Forward yaw': terrain_mean,
+                    'Std Forward yaw': std_yaws[terrain],
                     'P-value (vs flat)': p_val_flat,
                     'P-value (vs predefined)': p_val_predefined,
                     'U-statistic (vs flat)': u_stat_flat,
@@ -90,8 +81,8 @@ def perform_statistical_tests(data, mean_velocities, std_velocities):
         else:
             results.append({
                 'Terrain': terrain,
-                'Mean Forward Velocity': terrain_mean,
-                'Std Forward Velocity': std_velocities[terrain],
+                'Mean Forward yaw': terrain_mean,
+                'Std Forward yaw': std_yaws[terrain],
                 'P-value (vs flat)': np.nan,
                 'P-value (vs predefined)': np.nan,
                 'U-statistic (vs flat)': np.nan,
@@ -136,42 +127,35 @@ def set_axis_style(ax, labels):
     """
     ax.set_xticks(np.arange(1, len(labels) + 1), labels=labels)  # Set the tick positions and labels for the x-axis
     ax.set_xlim(0.25, len(labels) + 0.75)  # Set the limits of the x-axis
-def plot_violinplot(velocities_neural, velocities_predefined, terrains, base_filename):
+def plot_violinplot(yaws_neural, yaws_predefined, terrains, base_filename):
     """
-    Plot a violin plot of percentage velocities for each terrain and its predefined version, and save the plot.
+    Plot a violin plot of percentage yaws for each terrain and its predefined version, and save the plot.
     
     Parameters:
-    data (pd.DataFrame): The data containing terrain and percentage velocities.
+    data (pd.DataFrame): The data containing terrain and percentage yaws.
     base_filename (str): The base filename for saving the plot.
     """
     fig, ax = plt.subplots(figsize=(10, 6))
     
     # Separate predefined and normal terrains
-    add_label(ax.violinplot(velocities_neural, side='low', showmeans=True, showmedians=False, showextrema=False), "Neural")
-    add_label(ax.violinplot(velocities_predefined, side='high', showmeans=True, showmedians=False, showextrema=False), "Predefined")
+    add_label(ax.violinplot(yaws_neural, side='low', showmeans=True, showmedians=False, showextrema=False), "Neural")
+    add_label(ax.violinplot(yaws_predefined, side='high', showmeans=True, showmedians=False, showextrema=False), "Predefined")
     ax.legend(*zip(*labels), loc=4)
     
     # Customize the plot
     ax.set_xlabel('Experiment')
-    ax.set_ylabel('% Decrease compared to Neural Flat')
-    ax.set_title('% Decrease of Forward Velocity Compared to Flat Terrain')
+    ax.set_ylabel('Mean Forward Yaw')
+    ax.set_title('Mean Forward Yaw for each experiment')
     set_axis_style(ax, terrains)
     plt.xticks(rotation=45)
     plt.tight_layout()
     
-    # Add a second y-axis on the right side
-    ax2 = ax.twinx()
-    ax2.set_ylabel('% Decrease compared to Predefined Flat')
     
     # Set y-axis limits
-    ax.set_ylim(0, 130)  # Adjust the limits as needed
-    ax2.set_ylim(0, 130)  # Adjust the limits as needed
-    
-    # Adjust the plot layout to accommodate the second y-axis
-    fig.subplots_adjust(right=0.85)
+    ax.set_ylim(0, 1.1)  # Adjust the limits as needed
     
     # Save the plot
-    save_plot(fig, base_filename, 'violinplot/velocity_percent_flat')
+    save_plot(fig, base_filename, 'violinplot/yaw_percent_flat')
 
 
 
@@ -188,21 +172,21 @@ def running(file_path, output_file, base_filename):
     pd.DataFrame: The results of the statistical tests.
     """
     data = read_data(file_path)
-    data, mean_velocities, std_velocities = calculate_statistics(data)
-    results_df = perform_statistical_tests(data, mean_velocities, std_velocities)
+    data, mean_yaws, std_yaws = calculate_statistics(data)
+    results_df = perform_statistical_tests(data, mean_yaws, std_yaws)
     results_df.to_csv(output_file, index=False)
     
-    # Plot the velocities and save the plot
-    velocities_neural = [data[data['Terrain'] == terrain]['Velocity % of Flat'] for terrain in data['Terrain'].unique() if not terrain.startswith('predefined') and 'flat' not in terrain]
-    velocities_predefined = [data[data['Terrain'] == terrain]['Velocity % of Flat'] for terrain in data['Terrain'].unique() if terrain.startswith('predefined') and 'flat' not in terrain]
+    # Plot the yaws and save the plot
+    yaws_neural = [data[data['Terrain'] == terrain]['Yaw Rate'] for terrain in data['Terrain'].unique() if not terrain.startswith('predefined') and 'flat' not in terrain]
+    yaws_predefined = [data[data['Terrain'] == terrain]['Yaw Rate'] for terrain in data['Terrain'].unique() if terrain.startswith('predefined') and 'flat' not in terrain]
     terrains = data[data['Terrain'].str.startswith('predefined') == False]['Terrain'].unique().tolist()
     terrains = [terrain for terrain in terrains if 'flat' not in terrain]
-    plot_violinplot(velocities_neural, velocities_predefined, terrains, base_filename)
+    plot_violinplot(yaws_neural, yaws_predefined, terrains, base_filename)
     return results_df
-
+'Velocity % of Flat'
 def main():
-    file_path = 'sheets/velocities.csv'
-    output_file = 'sheets/velocities_table.csv'
+    file_path = 'sheets/yaws.csv'
+    output_file = 'sheets/yaw_table.csv'
     base_filename = 'graphs/all/'
     results_df = running(file_path, output_file, base_filename)
 

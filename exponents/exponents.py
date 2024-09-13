@@ -1,5 +1,5 @@
 import pandas as pd
-from scipy.stats import ttest_ind
+from scipy.stats import ttest_rel
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -49,7 +49,7 @@ def perform_statistical_tests(data, mean_exponents, std_exponents):
         
         if terrain != 'flat' and not terrain.startswith('predefined'):
             # T-test between terrain and flat
-            t_stat_flat, p_val_flat = ttest_ind(
+            t_stat_flat, p_val_flat = ttest_rel(
                 data[data['Terrain'] == terrain]['Exponent'],
                 data[data['Terrain'] == 'flat']['Exponent'],
             )
