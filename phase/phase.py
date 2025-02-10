@@ -57,15 +57,33 @@ def calculate_statistics():
     saving = []
     keys = list(data.keys())
     flat = data.get('Flat')
+    flat_mean = np.mean(flat)
+    flat_std = np.std(flat)
     for key in keys:
         if key != 'Flat':
             terrain = data.get(key)
+            terrain_mean = np.mean(terrain)
+            terrain_std = np.std(terrain)
+            print('flat:',flat, '\nterrain:',terrain, '\n\n')
             stat, p = mannwhitneyu(flat, terrain, alternative='less')
-            saving.append([key, stat, p])
+            saving.append([key, stat, p, terrain_mean,terrain_std, flat_mean,flat_std])
     return saving
 
+def plot_bar_graph():
+    # Plotting the original data
+    keys = list(data.keys())
+    colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+    plt.figure(figsize=(12, 6))
+    for key in keys:
+        plt.bar(key, np.mean(data.get(key)), yerr=np.std(data.get(key)), capsize = 5,label=key, color=colors.pop())
+
+    plt.xlabel('Perturbation')
+    plt.ylabel('Mean')
+    plt.title('Comparison of Mean for different perturbations')
+    plt.savefig('graphs/phase.png')
 saving = calculate_statistics()
-df = pd.DataFrame(saving, columns=['Perturbation', 'Stat', 'p-value'])
-df.to_csv('phase.csv', index=False)
+df = pd.DataFrame(saving, columns=['Perturbation', 'Stat', 'p-value', 'Perturbation Mean', 'Perturbation STD','Flat Mean','Flat STD'])
+df.to_csv('sheets/phase.csv', index=False)
+plot_bar_graph()
 
             

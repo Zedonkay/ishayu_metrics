@@ -179,13 +179,13 @@ def running(file_path, output_file, base_filename):
     """
     data = read_data(file_path)
     mean_exponents, std_exponents = calculate_statistics(data)
-    results_df = perform_statistical_tests(data, mean_exponents, std_exponents)
-    results_df.to_csv(output_file, index=False)
+    # results_df = perform_statistical_tests(data, mean_exponents, std_exponents)
+    # results_df.to_csv(output_file, index=False)
     
     # Plot the exponents and save the plots
     plot_graphs(data, mean_exponents,std_exponents, base_filename)
     
-    return results_df
+    return None
 
 def main():
     file_path = 'sheets/exponents.csv'
