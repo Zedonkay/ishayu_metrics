@@ -154,6 +154,35 @@ def plot_distributions(data, base_filename):
         plt.tight_layout()
         save_plot(fig, base_filename, f'distributions/distribution_{terrain}_vs_flat')
 
+def plot_all_distributions(data, base_filename):
+    """
+    Plot all distributions in different shades of blue and the flat distribution in red.
+    
+    Parameters:
+    data (pd.DataFrame): The data containing terrain and exponents.
+    base_filename (str): The base filename for saving the plot.
+    """
+    flat_data = data[data['Terrain'] == 'flat']['Exponent']
+    terrains = [t for t in data['Terrain'].unique() if t != 'flat' and not t.startswith('predefined')]
+    
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    # Plot flat terrain in red
+    flat_data.plot.kde(ax=ax, label='Flat Terrain', color='red')
+    
+    # Plot other terrains in different shades of blue
+    colors = plt.cm.viridis(np.linspace(0, 1, len(terrains)))
+    for terrain, color in zip(terrains, colors):
+        terrain_data = data[data['Terrain'] == terrain]['Exponent']
+        terrain_data.plot.kde(ax=ax, label=f'{terrain} Terrain', color=color)
+    
+    ax.set_xlabel('Exponent')
+    ax.set_ylabel('Density')
+    ax.set_title('All Terrain Distributions Compared to Flat Terrain')
+    ax.legend()
+    plt.tight_layout()
+    save_plot(fig, base_filename, 'distributions/all_terrain_distributions')
+
 def plot_graphs(data, mean_exponents, std_exponents, base_filename):
     """
     Plot all graphs and save the plots.
@@ -167,6 +196,7 @@ def plot_graphs(data, mean_exponents, std_exponents, base_filename):
     plot_boxplot(data, base_filename)
     plot_scatter(data, base_filename)
     plot_distributions(data, base_filename)
+    plot_all_distributions(data, base_filename)
 
 def running(file_path, output_file, base_filename):
     """
