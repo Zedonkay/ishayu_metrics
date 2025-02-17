@@ -1,4 +1,4 @@
-#!/Users/ishayu/Documents/GitHub/ishayu_metrics/.venv/bin/python
+#!/Users/ishayu/Documents/ishayu_metrics/.venv/bin/python
 # -*- coding: utf-8 -*-
 import re
 import sys
