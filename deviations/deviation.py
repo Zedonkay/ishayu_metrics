@@ -33,10 +33,9 @@ def save_plot(fig, base_filename, title):
 
 def plot_deviations_with_separate_amputations(deviations_terrain, deviations_flat, amputation_data_dict, base_filename):
     """
-    Plot a violin plot for terrain, flat, and each amputation trial separately and save the plot.
+    Plot a violin plot for flat and each amputation trial separately and save the plot.
 
     Parameters:
-    deviations_terrain (list): List of deviations for terrain.
     deviations_flat (list): List of deviations for flat terrain.
     amputation_data_dict (dict): Dictionary with amputation terrain names as keys and deviation lists as values.
     base_filename (str): The base filename for saving the plot.
@@ -58,19 +57,16 @@ def plot_deviations_with_separate_amputations(deviations_terrain, deviations_fla
         labels.append((mpatches.Patch(color=color), label))  # Append the color and label to the labels list
     
     # Calculate positions for all plots
-    num_violins = 2 + len(amputation_data_dict)  # terrain, flat, and each amputation trial
+    num_violins = 1 + len(amputation_data_dict)  # flat and each amputation trial
     positions = list(range(1, num_violins + 1))
     
-    # Plot terrain and flat deviations
-    v1 = ax.violinplot([deviations_terrain], [positions[0]], showmeans=True, showmedians=False, showextrema=False)
-    add_label(v1, "Terrain")
-    
-    v2 = ax.violinplot([deviations_flat], [positions[1]], showmeans=True, showmedians=False, showextrema=False)
-    add_label(v2, "Flat")
+    # Plot flat deviations
+    v1 = ax.violinplot([deviations_flat], [positions[0]], showmeans=True, showmedians=False, showextrema=False)
+    add_label(v1, "Flat")
     
     # Plot each amputation trial separately
     amputation_labels = []
-    for i, (terrain_name, deviations) in enumerate(amputation_data_dict.items(), 2):
+    for i, (terrain_name, deviations) in enumerate(amputation_data_dict.items(), 1):
         v = ax.violinplot([deviations], [positions[i]], showmeans=True, showmedians=False, showextrema=False)
         # Use a shortened/cleaned version of the terrain name for the label
         label = terrain_name.replace('amputate', 'Amp').replace('_', ' ')
@@ -87,11 +83,11 @@ def plot_deviations_with_separate_amputations(deviations_terrain, deviations_fla
     
     # Set x-axis ticks and labels
     ax.set_xticks(positions)
-    all_labels = ["Terrain", "Flat"] + amputation_labels
+    all_labels = ["Flat"] + amputation_labels
     ax.set_xticklabels(all_labels, rotation=45, ha='right')
     
     # Set y-axis limits
-    ax.set_ylim(0.075, 0.155)  # Adjust the limits as needed
+    # ax.set_ylim(0.075, 0.155)  # Adjust the limits as needed
 
     plt.tight_layout()
 
